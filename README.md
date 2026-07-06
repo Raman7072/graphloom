@@ -1,6 +1,6 @@
 # ✍️ Blog Writing Agent
 
-A multi-agent AI pipeline that researches, plans, writes, and illustrates technical blog posts — fully automated using **LangGraph**, **Groq**, **Tavily**, and **HuggingFace**.
+A multi-agent AI pipeline that researches, plans, writes, and illustrates technical blog posts — fully automated using **LangGraph**, **Groq**, **Tavily** and **HuggingFace**.
 
 ---
 
@@ -53,7 +53,7 @@ Topic Input
 ### 1. Clone & set up environment
 
 ```bash
-git clone <your-repo-url>
+git clone <https://github.com/Raman7072/Blog_writing_agent.git>
 cd "blog writing agent"
 
 python -m venv .venv
