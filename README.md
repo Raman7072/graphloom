@@ -143,7 +143,7 @@ User Input (Topic + Date)
 
 ```bash
 git clone "https://github.com/Raman7072/InkGraph"
-cd "blog writing agent"
+cd "InkGraph"
 
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
@@ -189,7 +189,7 @@ The Streamlit frontend provides:
 ## 📁 Project Structure
 
 ```
-blog writing agent/
+InkGraph/
 ├── backend.py          # LangGraph agent — all nodes, schemas, graph definition
 ├── frontend.py         # Streamlit UI (glassmorphic dashboard)
 ├── requirements.txt    # Python dependencies
@@ -284,15 +284,3 @@ Add a `Procfile`:
 ```
 web: streamlit run frontend.py --server.port $PORT --server.address 0.0.0.0
 ```
-
----
-
-## 📄 License
-
-MIT
-
----
-
-<div align="center">
-  <sub>Built with ❤️ using LangGraph · Groq · Tavily · FLUX · Streamlit</sub>
-</div>
