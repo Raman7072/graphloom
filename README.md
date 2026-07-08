@@ -289,4 +289,4 @@ web: streamlit run frontend.py --server.port $PORT --server.address 0.0.0.0
 
 ### Screenshot
 
-![](/images/ss1.png)
+[](/images/ss1.png)
