@@ -50,6 +50,8 @@ ormsgpack==1.12.2
 packaging==26.2
 pandas==3.0.3
 pillow==12.3.0
+psycopg2-binary==2.9.10
+bcrypt==4.2.1
 protobuf==7.35.1
 pyarrow==24.0.0
 pyasn1==0.6.3
@@ -85,6 +87,4 @@ watchdog==6.0.0
 websockets==15.0.1
 xxhash==3.8.0
 zstandard==0.25.0
-diffusers 
-transformers 
-torch
+extra-streamlit-components==0.1.71

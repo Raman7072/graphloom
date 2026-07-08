@@ -16,11 +16,49 @@ import streamlit as st
 # Import your compiled LangGraph app
 # -----------------------------
 from backend import app
+try:
+    from auth import (
+        init_db, register_user, login_user,
+        get_user_blogs, get_blog_content, delete_blog,
+        get_user_stats, get_user_blogs_detail,
+        update_user_name, change_password, delete_user_account,
+        create_session_token, verify_session_token,
+    )
+    _AUTH_AVAILABLE = True
+except ImportError:
+    _AUTH_AVAILABLE = False
+
+try:
+    import extra_streamlit_components as stx
+    _COOKIES_AVAILABLE = True
+except ImportError:
+    _COOKIES_AVAILABLE = False
 
 
 # -----------------------------
 # Helpers
 # -----------------------------
+def show_loading_screen(message: str, subtitle: str):
+    """Render a premium liquid glass loading/teleporting overlay."""
+    st.markdown(f"""
+    <div style="display:flex; justify-content:center; align-items:center; height:80vh; font-family:'Courier',monospace; color:#cbd5e1;">
+        <div style="text-align:center; background:rgba(255,255,255,0.02); padding:2.5rem; border:1px solid rgba(255,255,255,0.08); border-radius:20px; backdrop-filter:blur(32px); box-shadow:0 8px 32px rgba(0,0,0,0.37);">
+            <div style="font-size:1.8rem; font-weight:700; margin-bottom:0.8rem; letter-spacing:3px; background:linear-gradient(135deg,#a5b4fc 0%,#2dd4bf 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:pulse 1.2s infinite;">{message}</div>
+            <div style="font-size:0.8rem; color:#64748b; text-transform:uppercase; letter-spacing:2px;">{subtitle}</div>
+        </div>
+    </div>
+    <style>
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 0.6; }}
+        50% {{ opacity: 1; }}
+    }}
+    body {{
+        background-color: #0b0d19 !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
 def safe_slug(title: str) -> str:
     s = title.strip().lower()
     s = re.sub(r"[^a-z0-9 _-]+", "", s)
@@ -195,27 +233,399 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Initialise DB tables (no-op if DB not configured)
+if _AUTH_AVAILABLE:
+    try:
+        init_db()
+    except Exception:
+        pass
+
+# ── Cookie manager (must be initialised before any st.stop()) ────
+_cookie_manager = stx.CookieManager(key="inkgraph_cm") if _COOKIES_AVAILABLE else None
+
+# Handle pending cookie deletion on logout
+if _COOKIES_AVAILABLE and _cookie_manager and st.session_state.get("logout_pending"):
+    st.session_state.pop("logout_pending", None)
+    try:
+        _cookie_manager.delete("inkgraph_session", key="logout_delete_cookie")
+    except Exception:
+        pass
+
+# Auto-restore session from cookie on page load / refresh
+if _AUTH_AVAILABLE and _COOKIES_AVAILABLE and "user" not in st.session_state:
+    if not st.session_state.get("logged_out", False):
+        if "cookie_checked" not in st.session_state:
+            st.session_state["cookie_checked"] = False
+
+        cookies = _cookie_manager.get_all()
+        if not cookies and not st.session_state["cookie_checked"]:
+            st.session_state["cookie_checked"] = True
+            show_loading_screen("TELEPORTING...", "Securing Session Tunnel")
+            st.stop()
+        else:
+            if cookies:
+                _token = cookies.get("inkgraph_session")
+                if _token:
+                    _user_from_cookie = verify_session_token(str(_token))
+                    if _user_from_cookie:
+                        st.session_state["user"] = _user_from_cookie
+                        st.session_state["page"] = "home"
+
+# ── Auth helpers ─────────────────────────────────────────────
+def _render_auth_page():
+    """Full-page login / register UI shown when user is not logged in."""
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.markdown("""
+        <div style="text-align:center; padding:2.5rem 0 1.5rem 0;">
+            <!-- <div style="font-size:3.5rem; margin-bottom:0.5rem;">🖊️</div> -->
+            <h1 style="font-family:'Courier',monospace; font-size:2.4rem; font-weight:800;
+                background:linear-gradient(135deg,#a5b4fc 0%,#818cf8 50%,#2dd4bf 100%);
+                -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+                background-clip:text; margin:0 0 0.3rem 0;">InkGraph</h1>
+            <p style="color:#94a3b8; font-family:'Courier',monospace; font-size:0.9rem;
+                letter-spacing:1px; margin:0;">NEURAL BLOG GENERATING AGENT</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        tab_login, tab_reg = st.tabs(["🔑  Login", "📝  Register"])
+
+        with tab_login:
+            if "login_error" in st.session_state:
+                st.error(st.session_state.pop("login_error"))
+            with st.form("login_form", clear_on_submit=False):
+                email_in = st.text_input("Email", placeholder="you@example.com")
+                pass_in  = st.text_input("Password", type="password", placeholder="********")
+                if st.form_submit_button("Login", use_container_width=True, type="primary"):
+                    if not email_in or not pass_in:
+                        st.error("Please fill in all fields.")
+                    else:
+                        st.session_state["login_pending"] = {"email": email_in, "password": pass_in}
+                        st.rerun()
+
+        with tab_reg:
+            if "register_error" in st.session_state:
+                st.error(st.session_state.pop("register_error"))
+            with st.form("register_form", clear_on_submit=False):
+                name_in    = st.text_input("Full Name", placeholder="John Doe")
+                email_in2  = st.text_input("Email", placeholder="you@example.com", key="reg_email")
+                pass_in2   = st.text_input("Password", type="password",
+                                           placeholder="Min 6 characters", key="reg_pass")
+                confirm_in = st.text_input("Confirm Password", type="password",
+                                           placeholder="Repeat password", key="reg_confirm")
+                if st.form_submit_button("Create Account", use_container_width=True, type="primary"):
+                    if pass_in2 != confirm_in:
+                        st.error("Passwords do not match.")
+                    elif not name_in.strip() or not email_in2.strip() or not pass_in2:
+                        st.error("All fields are required.")
+                    else:
+                        st.session_state["register_pending"] = {
+                            "name": name_in,
+                            "email": email_in2,
+                            "password": pass_in2
+                        }
+                        st.rerun()
+
+
+def _render_profile_page(user: dict):
+    """Premium liquid glass user profile page."""
+
+    uid = user["id"]
+    stats = st.session_state.get("profile_stats")
+    blogs = st.session_state.get("profile_blogs")
+    if stats is None or blogs is None:
+        stats = get_user_stats(uid)
+        blogs = get_user_blogs_detail(uid)
+
+    initials = "".join(p[0].upper() for p in stats["name"].split()[:2])
+    member_since = stats["member_since"]
+    ms_str = member_since.strftime("%b %Y") if hasattr(member_since, "strftime") else str(member_since)[:7]
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    days_active = (now - member_since.replace(tzinfo=timezone.utc)).days if member_since else 0
+
+    # ── Liquid glass CSS (profile-specific) ──────────────────
+    st.markdown("""
+    <style>
+    .pg-hero {
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(32px) saturate(200%);
+        -webkit-backdrop-filter: blur(32px) saturate(200%);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 28px;
+        padding: 2.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.35),
+                    inset 0 1px 0 rgba(255,255,255,0.12),
+                    inset 0 -1px 0 rgba(0,0,0,0.2);
+        position: relative;
+        overflow: hidden;
+    }
+    .pg-hero::before {
+        content: '';
+        position: absolute; inset: 0;
+        background: linear-gradient(135deg,
+            rgba(165,180,252,0.08) 0%,
+            rgba(45,212,191,0.05) 50%,
+            rgba(139,92,246,0.08) 100%);
+        pointer-events: none;
+    }
+    .pg-hero::after {
+        content: '';
+        position: absolute;
+        top: -60%; left: -30%;
+        width: 120%; height: 120%;
+        background: radial-gradient(ellipse, rgba(165,180,252,0.08) 0%, transparent 70%);
+        animation: liquidShimmer 6s ease-in-out infinite alternate;
+        pointer-events: none;
+    }
+    @keyframes liquidShimmer {
+        0%   { transform: translate(0,0) scale(1); }
+        100% { transform: translate(10%,5%) scale(1.05); }
+    }
+    .pg-avatar {
+        width: 90px; height: 90px; min-width: 90px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #2dd4bf 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Courier Prime', 'Courier', monospace;
+        font-size: 2rem; font-weight: 800; color: #fff;
+        box-shadow: 0 0 28px rgba(165,180,252,0.45), 0 0 56px rgba(45,212,191,0.2);
+        animation: avatarPulse 3.5s ease-in-out infinite;
+        position: relative; z-index: 1;
+    }
+    @keyframes avatarPulse {
+        0%,100% { box-shadow: 0 0 28px rgba(165,180,252,0.45), 0 0 56px rgba(45,212,191,0.2); }
+        50%     { box-shadow: 0 0 40px rgba(165,180,252,0.7), 0 0 70px rgba(45,212,191,0.35); }
+    }
+    .pg-name  { font-family:'Courier Prime', 'Courier', monospace; font-size:1.7rem; font-weight:800;
+                color:#f1f5f9; margin:0 0 4px 0; letter-spacing:-0.3px; }
+    .pg-email { font-family:'Courier Prime', 'Courier', monospace; font-size:0.88rem; color:#64748b; margin:0 0 10px 0; }
+    .pg-badge {
+        display:inline-block; padding:4px 12px;
+        background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3);
+        border-radius:20px; font-family:'Courier Prime', 'Courier', monospace;
+        font-size:0.75rem; font-weight:600; color:#a5b4fc; letter-spacing:0.5px;
+    }
+    .stat-card {
+        background: rgba(255,255,255,0.035);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 18px;
+        padding: 1.4rem 1.2rem;
+        text-align: center;
+        position: relative; overflow: hidden;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25),
+                    inset 0 1px 0 rgba(255,255,255,0.08);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 36px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.14);
+    }
+    .stat-card::before {
+        content:''; position:absolute; inset:0;
+        background:linear-gradient(135deg,rgba(255,255,255,0.03) 0%,transparent 60%);
+        pointer-events:none;
+    }
+    .stat-num   { font-family:'Courier Prime', 'Courier', monospace; font-size:2.2rem; font-weight:800;
+                  color:#f1f5f9; margin:0 0 4px 0; }
+    .stat-label { font-family:'Courier Prime', 'Courier', monospace; font-size:0.78rem; color:#64748b;
+                  text-transform:uppercase; letter-spacing:1px; }
+    .stat-icon  { font-size:1.6rem; margin-bottom:0.5rem; display:block; }
+    
+    /* Native Streamlit border container overrides for Glassmorphism */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: rgba(255,255,255,0.03) !important;
+        backdrop-filter: blur(24px) !important;
+        -webkit-backdrop-filter: blur(24px) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 20px !important;
+        padding: 1.6rem !important;
+        margin-bottom: 1.5rem !important;
+        box-shadow: 0 4px 32px rgba(0,0,0,0.2),
+                    inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    }
+    
+    /* Special tint for Danger Zone block */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.danger-header) {
+        background: rgba(239,68,68,0.05) !important;
+        border: 1px solid rgba(239,68,68,0.2) !important;
+        box-shadow: 0 4px 32px rgba(239,68,68,0.1),
+                    inset 0 1px 0 rgba(255,255,255,0.02) !important;
+    }
+
+    .blog-row {
+        display:flex; justify-content:space-between; align-items:center;
+        padding:0.85rem 1rem;
+        background:rgba(255,255,255,0.02);
+        border:1px solid rgba(255,255,255,0.06);
+        border-radius:12px;
+        margin-bottom:0.6rem;
+        transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .blog-row:hover { background:rgba(165,180,252,0.06); border-color:rgba(165,180,252,0.2); }
+    .blog-title { font-family:'Courier Prime', 'Courier', monospace; font-size:0.95rem;
+                  font-weight:600; color:#e2e8f0; }
+    .blog-meta  { font-family:'Courier Prime', 'Courier', monospace; font-size:0.78rem; color:#64748b; margin-top:2px; }
+    .pg-section-title {
+        font-family:'Courier Prime', 'Courier', monospace; font-size:1.1rem; font-weight:700;
+        color:#f1f5f9; margin:0 0 1.2rem 0; letter-spacing:0.3px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Back navigation ──────────────────────────────────────
+    if st.button("← Back to InkGraph", key="back_from_profile"):
+        st.session_state["back_to_home_pending"] = True
+        st.rerun()
+
+    # ── Hero profile card ─────────────────────────────────────
+    st.markdown(f"""
+    <div class="pg-hero">
+        <div class="pg-avatar">{initials}</div>
+        <div style="position:relative;z-index:1;">
+            <div class="pg-name">{stats['name']}</div>
+            <div class="pg-email">{stats['email']}</div>
+            <span class="pg-badge">⭐ Member since {ms_str}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Stat cards ────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    cards = [
+        (c1, "📝", str(stats["blog_count"]), "Blogs Generated"),
+        (c2, "🖼️", str(stats["image_count"]), "Images Created"),
+        (c3, "📅", str(days_active), "Days Active"),
+        (c4, "⚡", str(stats["blog_count"] * 6), "Sections Written"),
+    ]
+    for col, icon, num, label in cards:
+        with col:
+            st.markdown(f"""
+            <div class="stat-card">
+                <span class="stat-icon">{icon}</span>
+                <div class="stat-num">{num}</div>
+                <div class="stat-label">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    left_col, right_col = st.columns([1.4, 1], gap="large")
+
+    # ── Blog History ──────────────────────────────────────────
+    with left_col:
+        with st.container(border=True):
+            st.markdown("""
+            <div class="pg-section-title" style="margin-bottom:1rem;">Blog History</div>
+            """, unsafe_allow_html=True)
+            if not blogs:
+                st.caption("No blogs generated yet. Go generate your first one!")
+            else:
+                for b in blogs:
+                    dt = b["created_at"]
+                    dt_str = dt.strftime("%d %b %Y") if hasattr(dt, "strftime") else str(dt)[:10]
+                    img_str = f"{b['image_count']} img{'s' if b['image_count'] != 1 else ''}"
+                    col_info, col_del = st.columns([5, 1])
+                    with col_info:
+                        st.markdown(f"""
+                        <div class="blog-row">
+                            <div class="blog-title">{b['title']}</div>
+                            <div class="blog-meta">{dt_str} &nbsp;·&nbsp; ~{b['word_count']:,} words &nbsp;·&nbsp; {img_str}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_del:
+                        if st.button("🗑", key=f"del_{b['id']}", help=f"Delete '{b['title'][:40]}'"):
+                            if delete_blog(b["id"], uid):
+                                st.session_state.pop("profile_stats", None)
+                                st.session_state.pop("profile_blogs", None)
+                                st.success("Deleted.")
+                                st.rerun()
+
+    # ── Account Settings ──────────────────────────────────────
+    with right_col:
+        with st.container(border=True):
+            st.markdown("""
+            <div class="pg-section-title" style="margin-bottom:1rem;">Account Settings</div>
+            """, unsafe_allow_html=True)
+
+            with st.expander("✏️ Change Display Name", expanded=False):
+                with st.form("change_name_form"):
+                    new_name = st.text_input("New Name", value=stats["name"])
+                    if st.form_submit_button("Update Name", type="primary", use_container_width=True):
+                        if update_user_name(uid, new_name):
+                            st.session_state["user"]["name"] = new_name.strip()
+                            st.session_state.pop("profile_stats", None)
+                            st.success("Name updated!")
+                            st.rerun()
+                        else:
+                            st.error("Name cannot be empty.")
+
+            with st.expander("🔒 Change Password", expanded=False):
+                with st.form("change_pass_form"):
+                    old_p = st.text_input("Current Password", type="password")
+                    new_p = st.text_input("New Password", type="password", placeholder="Min 6 characters")
+                    cnf_p = st.text_input("Confirm New Password", type="password")
+                    if st.form_submit_button("Update Password", type="primary", use_container_width=True):
+                        if new_p != cnf_p:
+                            st.error("Passwords do not match.")
+                        else:
+                            res = change_password(uid, old_p, new_p)
+                            if res == "ok":
+                                st.success("Password updated successfully!")
+                            else:
+                                st.error(res)
+
+        # Danger zone
+        with st.container(border=True):
+            st.markdown("""
+            <div class="danger-header pg-section-title" style="color:#f87171; margin-bottom:0.3rem;">⚠️ Danger Zone</div>
+            <div style="font-family:'Courier Prime', 'Courier', monospace; font-size:0.8rem; color:#64748b; margin-bottom:0.8rem;">
+                Permanently deletes your account and all generated blogs.
+            </div>
+            """, unsafe_allow_html=True)
+            with st.expander("🗑 Delete My Account", expanded=False):
+                with st.form("delete_acc_form"):
+                    confirm_pass = st.text_input("Enter your password to confirm", type="password")
+                    if st.form_submit_button("Delete Account Forever", use_container_width=True):
+                        res = delete_user_account(uid, confirm_pass)
+                        if res == "ok":
+                            st.session_state.clear()
+                            st.success("Account deleted.")
+                            st.rerun()
+                        else:
+                            st.error(res)
+
+
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech+Mono&display=swap');
 
 /* Base Override */
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Courier Prime', 'Courier', monospace;
     color: #cbd5e1;
+    scroll-behavior: smooth;
 }
 
 h1, h2, h3, h4, h5, h6 {
-    font-family: 'Outfit', sans-serif;
-    letter-spacing: 0.5px;
+    font-family: 'Courier Prime', 'Courier', monospace;
+    font-weight: 700;
+    letter-spacing: -0.5px;
 }
 
 .stApp {
-    background-color: #0b0d19 !important;
+    background-color: #080914 !important;
     background-image: 
-        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 60%),
-        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 60%),
-        radial-gradient(at 50% 100%, rgba(45, 212, 191, 0.06) 0px, transparent 60%) !important;
+        radial-gradient(at 0% 0%, rgba(129, 140, 248, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(45, 212, 191, 0.08) 0px, transparent 60%) !important;
     min-height: 100vh;
     position: relative;
     overflow-x: hidden;
@@ -225,58 +635,60 @@ h1, h2, h3, h4, h5, h6 {
 .stApp::before {
     content: '';
     position: absolute;
-    top: 5%;
-    left: 8%;
-    width: 450px;
-    height: 450px;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, transparent 70%);
-    filter: blur(80px);
+    top: 10%;
+    left: 15%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(129, 140, 248, 0.12) 0%, transparent 70%);
+    filter: blur(100px);
     pointer-events: none;
     z-index: 0;
-    animation: blobFloat 22s infinite ease-in-out alternate;
+    animation: blobFloat 25s infinite ease-in-out alternate;
 }
 
 .stApp::after {
     content: '';
     position: absolute;
-    bottom: 10%;
-    right: 8%;
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, rgba(45, 212, 191, 0.1) 0%, transparent 70%);
-    filter: blur(80px);
+    bottom: 15%;
+    right: 15%;
+    width: 550px;
+    height: 550px;
+    background: radial-gradient(circle, rgba(45, 212, 191, 0.08) 0%, transparent 70%);
+    filter: blur(100px);
     pointer-events: none;
     z-index: 0;
-    animation: blobFloat 28s infinite ease-in-out alternate-reverse;
+    animation: blobFloat 30s infinite ease-in-out alternate-reverse;
 }
 
 /* Glassmorphic Sidebar styling */
 [data-testid="stSidebar"] {
-    background: rgba(10, 15, 30, 0.55) !important;
-    backdrop-filter: blur(25px) !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3) !important;
+    background: rgba(11, 13, 28, 0.6) !important;
+    backdrop-filter: blur(35px) !important;
+    -webkit-backdrop-filter: blur(35px) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 15px 0 45px rgba(0, 0, 0, 0.45) !important;
     z-index: 100;
 }
 
 /* Sidebar header */
 .sidebar-header {
-    font-family: 'Outfit', sans-serif;
-    font-size: 1.15rem;
+    font-family: 'Courier Prime', 'Courier', monospace;
+    font-size: 1.1rem;
     font-weight: 600;
     color: #f1f5f9;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     padding-bottom: 12px;
     margin-bottom: 22px;
     letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
 
 /* Sidebar Widget labels */
 [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p,
 label[data-testid="stWidgetLabel"] p {
-    color: #cbd5e1 !important;
-    font-family: 'Outfit', sans-serif !important;
-    font-size: 0.88rem !important;
+    color: #94a3b8 !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
+    font-size: 0.85rem !important;
     font-weight: 500 !important;
     letter-spacing: 0.5px;
 }
@@ -284,43 +696,43 @@ label[data-testid="stWidgetLabel"] p {
 /* Text fields and Textareas - Frosted */
 .stTextArea textarea, .stTextInput input, .stDateInput input {
     background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 10px !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
     color: #f1f5f9 !important;
-    font-family: 'Inter', sans-serif !important;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    padding: 0.65rem 0.9rem !important;
 }
 
 .stTextArea textarea:focus, .stTextInput input:focus, .stDateInput input:focus {
     background: rgba(255, 255, 255, 0.04) !important;
-    border-color: rgba(165, 180, 252, 0.4) !important; /* Soft Lavender */
-    box-shadow: 0 0 15px rgba(165, 180, 252, 0.15) !important;
+    border-color: rgba(165, 180, 252, 0.5) !important; /* Soft Lavender */
+    box-shadow: 0 0 20px rgba(165, 180, 252, 0.2) !important;
 }
 
 /* Primary generate button with soft gradient glow styling */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.75) 0%, rgba(45, 212, 191, 0.75) 100%) !important; /* Indigo to Teal */
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.8) 0%, rgba(45, 212, 191, 0.8) 100%) !important;
     color: #ffffff !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    backdrop-filter: blur(12px) !important;
     border-radius: 12px !important;
-    padding: 0.7rem 1.4rem !important;
-    font-family: 'Outfit', sans-serif !important;
+    padding: 0.75rem 1.5rem !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 0.95rem !important;
     font-weight: 600 !important;
     letter-spacing: 0.5px !important;
     width: 100% !important;
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.15) !important;
+    box-shadow: 0 4px 20px rgba(129, 140, 248, 0.25) !important;
     cursor: pointer;
 }
 
 [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.25), 0 0 15px rgba(45, 212, 191, 0.15) !important;
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(45, 212, 191, 0.9) 100%) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 8px 30px rgba(129, 140, 248, 0.35), 0 0 20px rgba(45, 212, 191, 0.25) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
 [data-testid="stSidebar"] .stButton > button[kind="primary"]:active {
@@ -331,26 +743,27 @@ label[data-testid="stWidgetLabel"] p {
 [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
     background: rgba(255, 255, 255, 0.03) !important;
     color: #cbd5e1 !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 10px !important;
-    font-family: 'Outfit', sans-serif !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 0.9rem !important;
     font-weight: 500 !important;
     width: 100% !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     cursor: pointer;
 }
 
 [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
     background: rgba(255, 255, 255, 0.08) !important;
     color: #ffffff !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* Radio buttons list in sidebar */
 [data-testid="stRadio"] label {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 0.9rem !important;
     color: #94a3b8 !important;
     transition: all 0.2s ease;
@@ -363,103 +776,80 @@ label[data-testid="stWidgetLabel"] p {
 /* Tabs: Cyber Holographic styling */
 .stTabs [data-baseweb="tab-list"] {
     background: rgba(255, 255, 255, 0.02) !important;
-    border-radius: 14px !important;
-    padding: 6px !important;
+    border-radius: 16px !important;
+    padding: 0.4rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
     gap: 8px !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
-    backdrop-filter: blur(10px) !important;
+    margin-bottom: 2rem !important;
 }
 
 .stTabs [data-baseweb="tab"] {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 0.9rem !important;
-    font-weight: 500 !important;
-    border-radius: 10px !important;
+    font-weight: 600 !important;
     color: #94a3b8 !important;
-    padding: 0.6rem 1.3rem !important;
-    transition: all 0.3s ease !important;
+    padding: 0.5rem 1.2rem !important;
+    border-radius: 12px !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     border: 1px solid transparent !important;
 }
 
 .stTabs [data-baseweb="tab"]:hover {
     color: #ffffff !important;
-    background: rgba(255, 255, 255, 0.03) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
 }
 
 .stTabs [aria-selected="true"] {
-    background: rgba(99, 102, 241, 0.12) !important;
+    background: rgba(129, 140, 248, 0.15) !important;
     color: #ffffff !important;
-    border: 1px solid rgba(99, 102, 241, 0.3) !important;
-    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.15) !important;
+    border: 1px solid rgba(129, 140, 248, 0.3) !important;
+    box-shadow: 0 4px 20px rgba(129, 140, 248, 0.2) !important;
 }
 
 /* Frosted Glass Panels, Dataframes & Expanders */
 .stDataFrame, [data-testid="stExpander"] {
     background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 14px !important;
-    backdrop-filter: blur(20px) !important;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
-    transition: all 0.3s ease !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 16px !important;
+    backdrop-filter: blur(25px) !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 [data-testid="stExpander"]:hover {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border-color: rgba(99, 102, 241, 0.2) !important;
-    box-shadow: 0 8px 32px 0 rgba(99, 102, 241, 0.08) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(129, 140, 248, 0.2) !important;
+    box-shadow: 0 8px 32px 0 rgba(129, 140, 248, 0.1) !important;
 }
 
 /* Status box override */
 [data-testid="stStatus"] {
     background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 14px !important;
     color: #cbd5e1 !important;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    box-shadow: 0 4px 25px rgba(0,0,0,0.2) !important;
 }
 
 /* Download buttons */
 .stDownloadButton > button {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 10px !important;
-    color: #e2e8f0 !important;
-    font-family: 'Outfit', sans-serif !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    color: #cbd5e1 !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 0.9rem !important;
-    font-weight: 500 !important;
-    padding: 0.6rem 1.2rem !important;
-    transition: all 0.3s ease !important;
+    font-weight: 600 !important;
+    padding: 0.65rem 1.4rem !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .stDownloadButton > button:hover {
     background: rgba(255, 255, 255, 0.08) !important;
     color: #ffffff !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
-}
-
-/* Custom Alert styling */
-.stAlert {
-    background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-left: 4px solid rgba(99, 102, 241, 0.8) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15) !important;
-}
-
-/* Text */
-h1, h2, h3, h4 { color: #ffffff !important; }
-p, li, label, span { color: #cbd5e1; }
-
-/* Textarea specifically for event logs */
-.stTextArea textarea {
-    background: rgba(10, 15, 30, 0.4) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: #cbd5e1 !important;
-    border-radius: 10px;
-    font-family: 'Share Tech Mono', monospace !important;
-    font-size: 0.82rem !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* Custom Scrollbars */
@@ -474,11 +864,11 @@ p, li, label, span { color: #cbd5e1; }
     padding: 2.5rem 1.5rem;
     margin-bottom: 2.2rem;
     background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
     text-align: center;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.2), inset 0 0 20px rgba(255,255,255,0.01);
-    backdrop-filter: blur(25px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35), inset 0 0 20px rgba(255,255,255,0.01);
+    backdrop-filter: blur(30px);
     overflow: hidden;
     animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -487,12 +877,12 @@ p, li, label, span { color: #cbd5e1; }
     position: absolute;
     top: -50%; left: -50%; width: 200%; height: 200%;
     background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 60%);
-    animation: rotateLiquid 20s linear infinite;
+    animation: rotateLiquid 25s linear infinite;
     pointer-events: none;
 }
 
 .cyber-title {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Courier Prime', 'Courier', monospace !important;
     font-size: 3rem !important;
     font-weight: 800 !important;
     margin: 0 0 0.5rem 0 !important;
@@ -500,17 +890,17 @@ p, li, label, span { color: #cbd5e1; }
     -webkit-background-clip: text !important;
     -webkit-text-fill-color: transparent !important;
     background-clip: text !important;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    letter-spacing: 0.5px !important;
+    text-shadow: 0 2px 15px rgba(0, 0, 0, 0.3);
+    letter-spacing: -1px !important;
 }
 
 .cyber-subtitle {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Courier Prime', 'Courier', monospace;
     font-weight: 400;
     font-size: 0.95rem;
     color: #94a3b8;
     margin-bottom: 1rem;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
 .cyber-badge-container {
@@ -523,44 +913,62 @@ p, li, label, span { color: #cbd5e1; }
 .cyber-badge {
     display: inline-block;
     padding: 0.35rem 0.9rem;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Courier Prime', 'Courier', monospace;
     font-weight: 500;
     font-size: 0.75rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     color: #cbd5e1;
-    border-radius: 6px;
+    border-radius: 8px;
     letter-spacing: 0.5px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .cyber-ready-card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 28px;
     padding: 3.5rem 2rem;
     text-align: center;
     max-width: 650px;
     margin: 3.5rem auto;
-    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(20px);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(25px);
     animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .cyber-ready-icon {
     font-size: 4rem;
     margin-bottom: 1.5rem;
-    filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.15));
+    filter: drop-shadow(0 4px 15px rgba(255, 255, 255, 0.15));
     animation: float 4s ease-in-out infinite;
 }
 
 .cyber-ready-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Courier Prime', 'Courier', monospace;
     color: #ffffff;
     font-size: 1.6rem;
     font-weight: 700;
     margin-bottom: 0.75rem;
-    letter-spacing: 0.5px;
+    letter-spacing: -0.5px;
+}
+
+/* Glassmorphic border containers styling (global) */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background: rgba(255, 255, 255, 0.03) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 20px !important;
+    padding: 1.6rem !important;
+    margin-bottom: 1.5rem !important;
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.danger-header) {
+    background: rgba(239, 68, 68, 0.05) !important;
+    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+    box-shadow: 0 4px 32px rgba(239, 68, 68, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
 }
 
 /* Animations */
@@ -588,6 +996,79 @@ p, li, label, span { color: #cbd5e1; }
 </style>
 """, unsafe_allow_html=True)
 
+# Intercept pending auth database load actions (shows loading screen while querying)
+if "login_pending" in st.session_state:
+    show_loading_screen("TELEPORTING...", "Verifying Credentials")
+    pending = st.session_state.pop("login_pending")
+    user = login_user(pending["email"], pending["password"])
+    if user:
+        st.session_state["user"] = user
+        st.session_state["logged_out"] = False
+        if _COOKIES_AVAILABLE and _cookie_manager:
+            _cookie_manager.set(
+                "inkgraph_session",
+                create_session_token(user),
+                max_age=30 * 24 * 3600,
+                key="login_cookie_set"
+            )
+        st.session_state["page"] = "home"
+    else:
+        st.session_state["login_error"] = "Invalid email or password."
+    st.rerun()
+
+if "register_pending" in st.session_state:
+    show_loading_screen("TELEPORTING...", "Creating Secure Account")
+    pending = st.session_state.pop("register_pending")
+    result = register_user(pending["name"], pending["email"], pending["password"])
+    if isinstance(result, dict):
+        st.session_state["user"] = result
+        st.session_state["logged_out"] = False
+        if _COOKIES_AVAILABLE and _cookie_manager:
+            _cookie_manager.set(
+                "inkgraph_session",
+                create_session_token(result),
+                max_age=30 * 24 * 3600,
+                key="register_cookie_set"
+            )
+        st.session_state["page"] = "home"
+    else:
+        st.session_state["register_error"] = str(result)
+    st.rerun()
+
+# ── Auth gate ────────────────────────────────────────────────
+if _AUTH_AVAILABLE and "user" not in st.session_state:
+    _render_auth_page()
+    st.stop()
+
+_current_user: Dict[str, Any] = st.session_state.get("user", {})
+
+# Intercept pending profile data load actions
+if "profile_pending" in st.session_state:
+    show_loading_screen("TELEPORTING...", "Loading Profile Matrix")
+    st.session_state.pop("profile_pending")
+    try:
+        uid = _current_user["id"]
+        st.session_state["profile_stats"] = get_user_stats(uid)
+        st.session_state["profile_blogs"] = get_user_blogs_detail(uid)
+    except Exception:
+        pass
+    st.session_state["page"] = "profile"
+    st.rerun()
+
+if "back_to_home_pending" in st.session_state:
+    show_loading_screen("TELEPORTING...", "Loading Dashboard Matrix")
+    st.session_state.pop("back_to_home_pending")
+    st.session_state["page"] = "home"
+    st.rerun()
+
+# ── Page routing ─────────────────────────────────────────────
+if "page" not in st.session_state:
+    st.session_state["page"] = "home"
+
+if st.session_state["page"] == "profile" and _AUTH_AVAILABLE and _current_user:
+    _render_profile_page(_current_user)
+    st.stop()
+
 # ── Hero header ──────────────────────────────────────────────
 st.markdown("""
 <div class="cyber-header">
@@ -602,6 +1083,33 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.sidebar:
+    # ── User info + logout ────────────────────────────────
+    if _current_user:
+        # st.markdown(f"""
+        # <div style="padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08);
+        #     margin-bottom:16px;">
+        #     <div style="font-family:'Courier',monospace; font-size:0.78rem;
+        #         color:#94a3b8; margin-bottom:2px;">Logged in as</div>
+        #     <div style="font-family:'Courier',monospace; font-size:1rem;
+        #         font-weight:700; color:#f1f5f9;">👤 {_current_user['name']}</div>
+        #     <div style="font-family:'Courier',monospace; font-size:0.78rem;
+        #         color:#64748b;">{_current_user['email']}</div>
+        # </div>
+        # """, unsafe_allow_html=True)
+        if st.button("👤 My Profile", use_container_width=True):
+            st.session_state["profile_pending"] = True
+            st.rerun()
+        if st.button("Logout", use_container_width=True):
+            st.session_state["logout_pending"] = True
+            st.session_state["logged_out"] = True
+            st.session_state.pop("user", None)
+            st.session_state.pop("last_out", None)
+            st.session_state.pop("profile_stats", None)
+            st.session_state.pop("profile_blogs", None)
+            st.session_state["cookie_checked"] = True
+            st.rerun()
+
+    # ── Generate section ─────────────────────────────────
     st.markdown("""
     <div class="sidebar-header">
       ⚡ Generate New Blog
@@ -618,48 +1126,53 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-    <div style="font-family:'Outfit', sans-serif; font-size:0.9rem; font-weight:600; color:#e2e8f0; margin-bottom:0.5rem; letter-spacing:0.5px; text-transform:uppercase;">
-        📚 Past Databases
+    <div style="font-family:'Courier',monospace; font-size:0.9rem; font-weight:600;
+        color:#e2e8f0; margin-bottom:0.5rem; letter-spacing:0.5px; text-transform:uppercase;">
+        📚 My Blogs
     </div>""", unsafe_allow_html=True)
 
-    past_files = list_past_blogs()
-    if not past_files:
-        st.caption("No saved blogs found (*.md in current folder).")
-        selected_md_file = None
+    if _AUTH_AVAILABLE and _current_user:
+        _user_blogs = get_user_blogs(_current_user["id"])
     else:
-        # Build labels from file name + (optional) parsed title
-        options: List[str] = []
-        file_by_label: Dict[str, Path] = {}
-        for p in past_files[:50]:
-            try:
-                md_text = read_md_file(p)
-                title = extract_title_from_md(md_text, p.stem)
-            except Exception:
-                title = p.stem
-            label = f"{title}  ·  {p.name}"
-            options.append(label)
-            file_by_label[label] = p
+        _user_blogs = []
 
-        selected_label = st.radio(
+    if not _user_blogs:
+        st.caption("No blogs yet — generate your first one!")
+        selected_blog_id: Optional[int] = None
+    else:
+        _blog_opts: List[str] = []
+        _blog_id_map: Dict[str, int] = {}
+        for b in _user_blogs[:50]:
+            dt = b["created_at"]
+            dt_str = dt.strftime("%b %d, %Y") if hasattr(dt, "strftime") else str(dt)[:10]
+            label = f"{b['title']}  ·  {dt_str}"
+            _blog_opts.append(label)
+            _blog_id_map[label] = b["id"]
+
+        _sel_label = st.radio(
             "Select a blog to load",
-            options=options,
+            options=_blog_opts,
             index=0,
             label_visibility="collapsed",
         )
-        selected_md_file = file_by_label.get(selected_label)
+        selected_blog_id = _blog_id_map.get(_sel_label)
 
         if st.button("Load selected blog"):
-            if selected_md_file:
-                md_text = read_md_file(selected_md_file)
-                # Load into session_state as if it were a run output
-                st.session_state["last_out"] = {
-                    "plan": None,          # old files don't include plan
-                    "evidence": [],        # old files don't include evidence
-                    "image_specs": [],     # optional (not persisted)
-                    "final": md_text,      # markdown body
-                }
-                # also update the topic input to the title (best-effort) without changing UI
-                st.session_state["topic_prefill"] = extract_title_from_md(md_text, selected_md_file.stem)
+            if selected_blog_id and _current_user:
+                _blog = get_blog_content(selected_blog_id, _current_user["id"])
+                if _blog:
+                    _images_dir = Path("images")
+                    _images_dir.mkdir(exist_ok=True)
+                    for _img in _blog.get("images", []):
+                        (_images_dir / _img["filename"]).write_bytes(_img["data"])
+                    st.session_state["last_out"] = {
+                        "plan": None,
+                        "evidence": [],
+                        "image_specs": [],
+                        "final": _blog["content"],
+                    }
+                    st.success("Blog loaded.")
+                    st.rerun()
 
     st.divider()
     st.markdown("© 2026 Raman - All rights reserved.")
@@ -693,6 +1206,7 @@ if run_btn:
 
     inputs: Dict[str, Any] = {
         "topic": topic.strip(),
+        "user_id": _current_user.get("id") if _current_user else None,
         "mode": "",
         "needs_research": False,
         "queries": [],
@@ -750,7 +1264,7 @@ if run_btn:
                 border-radius: 14px;
                 padding: 1.5rem;
                 margin-top: 1rem;
-                font-family: 'Outfit', sans-serif;
+                font-family: 'Courier',monospace;
                 box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 0 15px rgba(255, 255, 255, 0.01);
                 backdrop-filter: blur(20px);
             ">
@@ -793,6 +1307,9 @@ if run_btn:
         elif kind == "final":
             out = payload
             st.session_state["last_out"] = out
+            # Clear cached profile data so they fetch the newly created blog
+            st.session_state.pop("profile_stats", None)
+            st.session_state.pop("profile_blogs", None)
             status.update(label="✅ Done", state="complete", expanded=False)
             log("[final] received final state")
 
@@ -939,7 +1456,7 @@ else:
     <div class="cyber-ready-card">
       <div class="cyber-ready-icon">✍️</div>
       <h3 class="cyber-ready-title">Awaiting Topic Input</h3>
-      <p style="font-family: 'Outfit', sans-serif; color: #94a3b8; font-size: 0.95rem; margin-bottom: 1.5rem;">
+      <p style="font-family: 'Courier',monospace; color: #94a3b8; font-size: 0.95rem; margin-bottom: 1.5rem;">
         Please specify a topic in the side console to initialize the neural compiler.
       </p>
       <div style="
@@ -950,7 +1467,7 @@ else:
           border-radius: 8px;
           font-size: 0.85rem;
           color: #94a3b8;
-          font-family: 'Outfit', sans-serif;
+          font-family: 'Courier',monospace;
       ">
         STANDBY MODE
       </div>

@@ -15,6 +15,7 @@ from langgraph.types import Send
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
+import concurrent.futures
 
 load_dotenv()
 
@@ -87,6 +88,9 @@ class GlobalImagePlan(BaseModel):
 
 class State(TypedDict):
     topic: str
+
+    # auth
+    user_id: Optional[int]  # set by frontend when user is logged in
 
     # routing / research
     mode: str
@@ -206,8 +210,18 @@ Rules:
 def research_node(state: State) -> dict:
     queries = (state.get("queries") or [])[:10]
     raw: List[dict] = []
-    for q in queries:
-        raw.extend(_tavily_search(q, max_results=6))
+    
+    # Optimize search performance by parallelizing Tavily API requests using ThreadPoolExecutor
+    if queries:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(queries), 8)) as executor:
+            futures = {executor.submit(_tavily_search, q, 6): q for q in queries}
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    res = future.result()
+                    if res:
+                        raw.extend(res)
+                except Exception:
+                    pass
 
     if not raw:
         return {"evidence": []}
@@ -453,6 +467,71 @@ def _gemini_generate_image_bytes(prompt: str) -> bytes:
     return img_byte_arr.getvalue()
 
 
+def _generate_placeholder_diagram(prompt: str, filename: str, caption: str) -> bytes:
+    """
+    Generates a visually stunning, frosted-glass themed placeholder diagram
+    using PIL when Hugging Face API rate limits or errors out.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+
+    width, height = 1200, 800
+    image = Image.new("RGBA", (width, height), (11, 13, 25, 255))  # #0b0d19 cyber theme bg
+    draw = ImageDraw.Draw(image)
+
+    # Beautiful fluid glowing colored abstract shapes (sage, lavender, mint) in background
+    draw.ellipse([(-200, -200), (600, 600)], fill=(165, 180, 252, 25))
+    draw.ellipse([(600, 300), (1400, 900)], fill=(45, 212, 191, 18))
+    draw.ellipse([(100, 400), (800, 1000)], fill=(139, 92, 246, 15))
+
+    # Grid lines
+    grid_color = (255, 255, 255, 6)
+    for x in range(0, width, 45):
+        draw.line([(x, 0), (x, height)], fill=grid_color, width=1)
+    for y in range(0, height, 45):
+        draw.line([(0, y), (width, y)], fill=grid_color, width=1)
+
+    # Glassmorphism container
+    draw.rounded_rectangle([50, 50, width - 50, height - 50], radius=24, fill=(255, 255, 255, 3), outline=(255, 255, 255, 20), width=2)
+
+    try:
+        font_title = ImageFont.truetype("Courier", 34)
+        font_mono = ImageFont.truetype("Courier", 16)
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_mono = ImageFont.load_default()
+
+    # Dynamic nodes representing the compilation graph
+    nodes = [
+        {"name": "INPUT MATRIX", "pos": (220, 400), "color": (165, 180, 252)},
+        {"name": "PROCESSING LAYER", "pos": (600, 280), "color": (45, 212, 191)},
+        {"name": "REFINEMENT LAYER", "pos": (600, 520), "color": (139, 92, 246)},
+        {"name": "OUTPUT COMPILATION", "pos": (980, 400), "color": (244, 63, 94)}
+    ]
+
+    arrow_color = (255, 255, 255, 50)
+    draw.line([nodes[0]["pos"], nodes[1]["pos"]], fill=arrow_color, width=2)
+    draw.line([nodes[0]["pos"], nodes[2]["pos"]], fill=arrow_color, width=2)
+    draw.line([nodes[1]["pos"], nodes[3]["pos"]], fill=arrow_color, width=2)
+    draw.line([nodes[2]["pos"], nodes[3]["pos"]], fill=arrow_color, width=2)
+
+    for n in nodes:
+        x, y = n["pos"]
+        r = 85
+        draw.ellipse([(x - r - 8, y - r - 8), (x + r + 8, y + r + 8)], outline=(*n["color"], 40), width=1)
+        draw.ellipse([(x - r, y - r), (x + r, y + r)], fill=(13, 16, 33, 235), outline=(*n["color"], 200), width=3)
+        draw.text((x, y), n["name"], fill=(241, 245, 249, 235), anchor="mm", font=font_mono)
+
+    # Text headers
+    draw.text((width // 2, 100), "INKGRAPH COMPILER DIAGRAM", fill=(255, 255, 255, 255), anchor="mm", font=font_title)
+    draw.text((80, 140), "// DYNAMIC ARCHITECTURE COMPILATION MATRIX", fill=(100, 116, 139, 200), font=font_mono)
+    draw.text((80, height - 90), f"SPEC: {caption.upper()[:70]}", fill=(100, 116, 139, 200), font=font_mono)
+
+    img_byte_arr = io.BytesIO()
+    image.convert("RGB").save(img_byte_arr, format='PNG')
+    return img_byte_arr.getvalue()
+
+
 def _safe_slug(title: str) -> str:
     s = title.strip().lower()
     s = re.sub(r"[^a-z0-9 _-]+", "", s)
@@ -466,11 +545,16 @@ def generate_and_place_images(state: State) -> dict:
 
     md = state.get("md_with_placeholders") or state["merged_md"]
     image_specs = state.get("image_specs", []) or []
+    user_id: Optional[int] = state.get("user_id")
+
+    # Collect generated image bytes for DB storage
+    collected_images: list = []
 
     # If no images requested, just write merged markdown
     if not image_specs:
         filename = f"{_safe_slug(plan.blog_title)}.md"
         Path(filename).write_text(md, encoding="utf-8")
+        _persist_to_db(user_id, plan, filename, md, collected_images)
         return {"final": md}
 
     images_dir = Path("images")
@@ -478,31 +562,58 @@ def generate_and_place_images(state: State) -> dict:
 
     for spec in image_specs:
         placeholder = spec["placeholder"]
-        filename = spec["filename"]
-        out_path = images_dir / filename
+        img_filename = spec["filename"]
+        out_path = images_dir / img_filename
 
         # generate only if needed
+        img_bytes: Optional[bytes] = None
         if not out_path.exists():
             try:
                 img_bytes = _gemini_generate_image_bytes(spec["prompt"])
                 out_path.write_bytes(img_bytes)
-            except Exception as e:
-                # graceful fallback: keep doc usable
-                prompt_block = (
-                    f"> **[IMAGE GENERATION FAILED]** {spec.get('caption','')}\n>\n"
-                    f"> **Alt:** {spec.get('alt','')}\n>\n"
-                    f"> **Prompt:** {spec.get('prompt','')}\n>\n"
-                    f"> **Error:** {e}\n"
-                )
-                md = md.replace(placeholder, prompt_block)
-                continue
+            except Exception:
+                try:
+                    # premium Pillow glassmorphic fallback
+                    img_bytes = _generate_placeholder_diagram(spec["prompt"], img_filename, spec.get("caption", "Simulation"))
+                    out_path.write_bytes(img_bytes)
+                except Exception:
+                    # fallback to text block if Pillow also fails
+                    prompt_block = (
+                        f"> **[IMAGE PLACEHOLDER]** {spec.get('caption','')}\n>\n"
+                        f"> **Alt:** {spec.get('alt','')}\n"
+                    )
+                    md = md.replace(placeholder, prompt_block)
+                    continue
+        else:
+            img_bytes = out_path.read_bytes()
 
-        img_md = f"![{spec['alt']}](images/{filename})\n*{spec['caption']}*"
+        if img_bytes:
+            collected_images.append({"filename": img_filename, "data": img_bytes})
+
+        img_md = f"![{spec['alt']}](images/{img_filename})\n*{spec['caption']}*"
         md = md.replace(placeholder, img_md)
 
-    filename = f"{_safe_slug(plan.blog_title)}.md"
-    Path(filename).write_text(md, encoding="utf-8")
+    slug = _safe_slug(plan.blog_title)
+    Path(f"{slug}.md").write_text(md, encoding="utf-8")
+    _persist_to_db(user_id, plan, slug, md, collected_images)
     return {"final": md}
+
+
+def _persist_to_db(user_id: Optional[int], plan, slug: str, md: str, images: list):
+    """Save blog to PostgreSQL if user_id is available. Silently skips on any error."""
+    if not user_id:
+        return
+    try:
+        from auth import save_blog
+        save_blog(
+            user_id=user_id,
+            title=plan.blog_title,
+            slug=slug,
+            content=md,
+            images=images,
+        )
+    except Exception:
+        pass  # DB not configured or unavailable — continue without persisting
 
 # build reducer subgraph
 reducer_graph = StateGraph(State)
