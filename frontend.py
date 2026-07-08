@@ -189,7 +189,7 @@ def extract_title_from_md(md: str, fallback: str) -> str:
 # Streamlit UI
 # -----------------------------
 st.set_page_config(
-    page_title="Blog Writing Agent",
+    page_title="InkGraph",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -592,7 +592,7 @@ p, li, label, span { color: #cbd5e1; }
 st.markdown("""
 <div class="cyber-header">
   <div class="cyber-scanline"></div>
-  <h1 class="cyber-title">Cyber-Writer</h1>
+  <h1 class="cyber-title">InkGraph</h1>
   <div class="cyber-subtitle">NEURAL BLOG GENERATING AGENT | POWERED BY LANGGRAPH</div>
   <div class="cyber-badge-container">
     <span class="cyber-badge">SYSTEM STATUS: ONLINE</span>
