@@ -1,8 +1,8 @@
-# 🖊️ InkGraph
+# 🖊️ ScribeGraph
 
 > **A Neural Blog Generating Agent powered by LangGraph**
 
-InkGraph is an **end-to-end autonomous AI agent** that generates publication-ready technical blog posts on any topic — with no manual writing required. You give it a topic and a date, and it autonomously plans, researches, writes, illustrates, and exports a complete blog article complete with diagrams, citations, and structured markdown.
+ScribeGraph is an **end-to-end autonomous AI agent** that generates publication-ready technical blog posts on any topic — with no manual writing required. You give it a topic and a date, and it autonomously plans, researches, writes, illustrates and exports a complete blog article complete with diagrams, citations, and structured markdown.
 
 It is not a simple "prompt → text" pipeline. It is a **stateful multi-agent graph** where specialized AI nodes collaborate to produce high-quality content — just like a real editorial team.
 
@@ -65,7 +65,7 @@ It is not a simple "prompt → text" pipeline. It is a **stateful multi-agent gr
 
 ## 🌟 What Makes InkGraph Unique?
 
-| Aspect | Most AI Writing Tools | InkGraph |
+| Aspect | Most AI Writing Tools | ScribeGraph |
 |---|---|---|
 | Architecture | Single prompt → response | Multi-node **stateful agent graph** |
 | Research | Hallucinated facts | Verified real-time web sources |
@@ -142,8 +142,8 @@ User Input (Topic + Date)
 ### 1. Clone & set up environment
 
 ```bash
-git clone "https://github.com/Raman7072/InkGraph"
-cd "InkGraph"
+git clone "https://github.com/Raman7072/ScribeGraph"
+cd "ScribeGraph"
 
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
@@ -189,7 +189,7 @@ The Streamlit frontend provides:
 ## 📁 Project Structure
 
 ```
-InkGraph/
+ScribeGraph/
 ├── backend.py          # LangGraph agent — all nodes, schemas, graph definition
 ├── frontend.py         # Streamlit UI (glassmorphic dashboard)
 ├── requirements.txt    # Python dependencies
@@ -253,7 +253,7 @@ Download directly from the **Preview tab**:
 
 ---
 
-## 💡 Why InkGraph?
+## 💡 Why ScribeGraph?
 
 1. **Content demand is exploding** — Automates the full blog workflow: research → plan → write → illustrate → export.
 2. **No hallucinations** — Evidence-grounded writing with verified source citations.
