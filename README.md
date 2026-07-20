@@ -143,7 +143,7 @@ User Input (Topic + Date)
 
 ```bash
 git clone "https://github.com/Raman7072/Medhai"
-cd "blog writing agent"
+cd "Medhai"
 
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
