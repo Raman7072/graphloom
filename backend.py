@@ -523,7 +523,7 @@ def _generate_placeholder_diagram(prompt: str, filename: str, caption: str) -> b
         draw.text((x, y), n["name"], fill=(241, 245, 249, 235), anchor="mm", font=font_mono)
 
     # Text headers
-    draw.text((width // 2, 100), "INKGRAPH COMPILER DIAGRAM", fill=(255, 255, 255, 255), anchor="mm", font=font_title)
+    draw.text((width // 2, 100), "MEDHĀ COMPILER DIAGRAM", fill=(255, 255, 255, 255), anchor="mm", font=font_title)
     draw.text((80, 140), "// DYNAMIC ARCHITECTURE COMPILATION MATRIX", fill=(100, 116, 139, 200), font=font_mono)
     draw.text((80, height - 90), f"SPEC: {caption.upper()[:70]}", fill=(100, 116, 139, 200), font=font_mono)
 

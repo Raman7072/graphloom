@@ -24,7 +24,7 @@ if not _SESSION_SECRET:
     if _ENV.lower() == "production":
         raise RuntimeError("CRITICAL SECURITY ERROR: SESSION_SECRET env var must be set in a production environment!")
     else:
-        _SESSION_SECRET = "inkgraph-dev-secret-CHANGE-IN-PROD"
+        _SESSION_SECRET = "medha-dev-secret-CHANGE-IN-PROD"
 
 _pool = None
 

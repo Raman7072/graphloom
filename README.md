@@ -1,8 +1,8 @@
-# 🖊️ ScribeGraph
+# 📜 Medhā!
 
-> **A Neural Blog Generating Agent powered by LangGraph**
+> **A Stateful Multi-Agent Blog Writing Agent powered by LangGraph**
 
-ScribeGraph is an **end-to-end autonomous AI agent** that generates publication-ready technical blog posts on any topic — with no manual writing required. You give it a topic and a date, and it autonomously plans, researches, writes, illustrates and exports a complete blog article complete with diagrams, citations, and structured markdown.
+Medhā! is an **end-to-end autonomous AI agent** that generates publication-ready technical blog posts on any topic — with no manual writing required. You give it a topic and a date, and it autonomously plans, researches, writes, illustrates, and exports a complete blog article complete with diagrams, citations, and structured markdown.
 
 It is not a simple "prompt → text" pipeline. It is a **stateful multi-agent graph** where specialized AI nodes collaborate to produce high-quality content — just like a real editorial team.
 
@@ -63,9 +63,9 @@ It is not a simple "prompt → text" pipeline. It is a **stateful multi-agent gr
 
 ---
 
-## 🌟 What Makes InkGraph Unique?
+## 🌟 What Makes Medhā! Unique?
 
-| Aspect | Most AI Writing Tools | ScribeGraph |
+| Aspect | Most AI Writing Tools | Medhā! |
 |---|---|---|
 | Architecture | Single prompt → response | Multi-node **stateful agent graph** |
 | Research | Hallucinated facts | Verified real-time web sources |
@@ -142,8 +142,8 @@ User Input (Topic + Date)
 ### 1. Clone & set up environment
 
 ```bash
-git clone "https://github.com/Raman7072/ScribeGraph"
-cd "ScribeGraph"
+git clone <your-repo-url>
+cd "blog writing agent"
 
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
@@ -189,7 +189,7 @@ The Streamlit frontend provides:
 ## 📁 Project Structure
 
 ```
-ScribeGraph/
+Medhāi/
 ├── backend.py          # LangGraph agent — all nodes, schemas, graph definition
 ├── frontend.py         # Streamlit UI (glassmorphic dashboard)
 ├── requirements.txt    # Python dependencies
@@ -253,7 +253,7 @@ Download directly from the **Preview tab**:
 
 ---
 
-## 💡 Why ScribeGraph?
+## 💡 Why Medhā!?
 
 1. **Content demand is exploding** — Automates the full blog workflow: research → plan → write → illustrate → export.
 2. **No hallucinations** — Evidence-grounded writing with verified source citations.
@@ -287,6 +287,12 @@ web: streamlit run frontend.py --server.port $PORT --server.address 0.0.0.0
 
 ---
 
-### Screenshot
+## 📄 License
 
-![](/images/ss1.png)
+MIT
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ using LangGraph · Groq · Tavily · FLUX · Streamlit</sub>
+</div>

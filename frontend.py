@@ -231,7 +231,7 @@ def extract_title_from_md(md: str, fallback: str) -> str:
 # Streamlit UI
 # -----------------------------
 st.set_page_config(
-    page_title="InkGraph",
+    page_title="Medhā!",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -245,14 +245,14 @@ if _AUTH_AVAILABLE:
         pass
 
 # ── Cookie manager (must be initialised before any st.stop()) ────
-_cookie_manager = stx.CookieManager(key="inkgraph_cm") if _COOKIES_AVAILABLE else None
+_cookie_manager = stx.CookieManager(key="medha_cm") if _COOKIES_AVAILABLE else None
 
 # Handle pending cookie deletion on logout
 if _COOKIES_AVAILABLE and _cookie_manager and st.session_state.get("logout_pending"):
     st.session_state.pop("logout_pending", None)
     try:
-        _cookie_manager.delete("inkgraph_session", key="logout_delete_cookie")
-        _cookie_manager.delete("inkgraph_page", key="logout_delete_page_cookie")
+        _cookie_manager.delete("medha_session", key="logout_delete_cookie")
+        _cookie_manager.delete("medha_page", key="logout_delete_page_cookie")
     except Exception:
         pass
 
@@ -269,12 +269,12 @@ if _AUTH_AVAILABLE and _COOKIES_AVAILABLE and "user" not in st.session_state:
             st.stop()
         else:
             if cookies:
-                _token = cookies.get("inkgraph_session")
+                _token = cookies.get("medha_session")
                 if _token:
                     _user_from_cookie = verify_session_token(str(_token))
                     if _user_from_cookie:
                         st.session_state["user"] = _user_from_cookie
-                        st.session_state["page"] = cookies.get("inkgraph_page", "home")
+                        st.session_state["page"] = cookies.get("medha_page", "home")
 
 # ── Auth helpers ─────────────────────────────────────────────
 def _render_auth_page():
@@ -287,7 +287,7 @@ def _render_auth_page():
             <h1 style="font-family:'Courier',monospace; font-size:2.4rem; font-weight:800;
                 background:linear-gradient(135deg,#a5b4fc 0%,#818cf8 50%,#2dd4bf 100%);
                 -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-                background-clip:text; margin:0 0 0.3rem 0;">InkGraph</h1>
+                background-clip:text; margin:0 0 0.3rem 0;">Medhā!</h1>
             <p style="color:#94a3b8; font-family:'Courier',monospace; font-size:0.9rem;
                 letter-spacing:1px; margin:0;">NEURAL BLOG GENERATING AGENT</p>
         </div>
@@ -398,7 +398,7 @@ def _render_profile_page(user: dict):
         background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #2dd4bf 100%);
         display: flex; align-items: center; justify-content: center;
         font-family: 'Courier Prime', 'Courier', monospace;
-        font-size: 2rem; font-weight: 800; color: #fff;
+        font-size: 2rem; font-weight: 800; color: #f5f5f5;
         box-shadow: 0 0 28px rgba(165,180,252,0.45), 0 0 56px rgba(45,212,191,0.2);
         animation: avatarPulse 3.5s ease-in-out infinite;
         position: relative; z-index: 1;
@@ -486,11 +486,11 @@ def _render_profile_page(user: dict):
     """, unsafe_allow_html=True)
 
     # ── Back navigation ──────────────────────────────────────
-    if st.button("BACK TO INKGRAPH", key="back_from_profile"):
+    if st.button("BACK TO MEDHĀ!", key="back_from_profile"):
         st.session_state["back_to_home_pending"] = True
         if _COOKIES_AVAILABLE and _cookie_manager:
             _cookie_manager.set(
-                "inkgraph_page",
+                "medha_page",
                 "home",
                 max_age=30 * 24 * 3600,
                 key="back_home_page_cookie_set"
@@ -737,7 +737,7 @@ label[data-testid="stWidgetLabel"] p {
 /* Primary generate button with soft gradient glow styling */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {
     background: linear-gradient(135deg, rgba(129, 140, 248, 0.8) 0%, rgba(45, 212, 191, 0.8) 100%) !important;
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
     border: 1px solid rgba(255, 255, 255, 0.15) !important;
     backdrop-filter: blur(12px) !important;
     border-radius: 12px !important;
@@ -778,7 +778,7 @@ label[data-testid="stWidgetLabel"] p {
 
 [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
     background: rgba(255, 255, 255, 0.08) !important;
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
     border-color: rgba(255, 255, 255, 0.15) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
     transform: translateY(-1px) !important;
@@ -793,7 +793,7 @@ label[data-testid="stWidgetLabel"] p {
 }
 
 [data-testid="stRadio"] label:hover {
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
 }
 
 /* Tabs: Cyber Holographic styling */
@@ -818,13 +818,13 @@ label[data-testid="stWidgetLabel"] p {
 }
 
 .stTabs [data-baseweb="tab"]:hover {
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
     background: rgba(255, 255, 255, 0.04) !important;
 }
 
 .stTabs [aria-selected="true"] {
     background: rgba(129, 140, 248, 0.15) !important;
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
     border: 1px solid rgba(129, 140, 248, 0.3) !important;
     box-shadow: 0 4px 20px rgba(129, 140, 248, 0.2) !important;
 }
@@ -869,7 +869,7 @@ label[data-testid="stWidgetLabel"] p {
 
 .stDownloadButton > button:hover {
     background: rgba(255, 255, 255, 0.08) !important;
-    color: #ffffff !important;
+    color: #f5f5f5 !important;
     border-color: rgba(255, 255, 255, 0.15) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
     transform: translateY(-1px) !important;
@@ -969,7 +969,7 @@ label[data-testid="stWidgetLabel"] p {
 
 .cyber-ready-title {
     font-family: 'Courier Prime', 'Courier', monospace;
-    color: #ffffff;
+    color: #f5f5f5;
     font-size: 1.6rem;
     font-weight: 700;
     margin-bottom: 0.75rem;
@@ -1029,13 +1029,13 @@ if "login_pending" in st.session_state:
         st.session_state["logged_out"] = False
         if _COOKIES_AVAILABLE and _cookie_manager:
             _cookie_manager.set(
-                "inkgraph_session",
+                "medha_session",
                 create_session_token(user),
                 max_age=30 * 24 * 3600,
                 key="login_cookie_set"
             )
             _cookie_manager.set(
-                "inkgraph_page",
+                "medha_page",
                 "home",
                 max_age=30 * 24 * 3600,
                 key="login_page_cookie_set"
@@ -1054,13 +1054,13 @@ if "register_pending" in st.session_state:
         st.session_state["logged_out"] = False
         if _COOKIES_AVAILABLE and _cookie_manager:
             _cookie_manager.set(
-                "inkgraph_session",
+                "medha_session",
                 create_session_token(result),
                 max_age=30 * 24 * 3600,
                 key="register_cookie_set"
             )
             _cookie_manager.set(
-                "inkgraph_page",
+                "medha_page",
                 "home",
                 max_age=30 * 24 * 3600,
                 key="register_page_cookie_set"
@@ -1108,7 +1108,7 @@ if st.session_state["page"] == "profile" and _AUTH_AVAILABLE and _current_user:
 st.markdown("""
 <div class="cyber-header">
   <div class="cyber-scanline"></div>
-  <h1 class="cyber-title">InkGraph</h1>
+  <h1 class="cyber-title">Medhā!</h1>
   <div class="cyber-subtitle">NEURAL BLOG GENERATING AGENT | POWERED BY LANGGRAPH</div>
   <div class="cyber-badge-container">
     <span class="cyber-badge">SYSTEM STATUS: ONLINE</span>
@@ -1135,7 +1135,7 @@ with st.sidebar:
             st.session_state["profile_pending"] = True
             if _COOKIES_AVAILABLE and _cookie_manager:
                 _cookie_manager.set(
-                    "inkgraph_page",
+                    "medha_page",
                     "profile",
                     max_age=30 * 24 * 3600,
                     key="profile_page_cookie_set"
@@ -1217,7 +1217,7 @@ with st.sidebar:
                     st.rerun()
 
     st.divider()
-    st.markdown("© 2026 InkGraph - All rights reserved.")
+    st.markdown("© 2026 Medhā! - All rights reserved.")
     
 
 # Keep your topic input as-is; optionally prefill for next run after loading a blog
@@ -1311,7 +1311,7 @@ if run_btn:
                 backdrop-filter: blur(20px);
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: 0.6rem; margin-bottom: 1.2rem;">
-                    <span style="color: #ffffff; font-weight: 600; font-size: 0.95rem; letter-spacing: 0.5px;">📡 AGENT CORE TELEMETRY</span>
+                    <span style="color: #f5f5f5; font-weight: 600; font-size: 0.95rem; letter-spacing: 0.5px;">📡 AGENT CORE TELEMETRY</span>
                     <span style="color: #a5b4fc; font-size: 0.8rem; font-weight: 500;">STREAMING ACTIVE</span>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
