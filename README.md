@@ -2,7 +2,7 @@
 
 > **An Autonomous, Multi-Agent Technical Blog Generation Engine Powered by LangGraph, Groq, and Streamlit.**
 
-![GraphLoom Logo](images/graphloom_logo.png)
+![GraphLoom Logo](images/logo.png)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-000000?style=for-the-badge&logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
