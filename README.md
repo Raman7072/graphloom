@@ -73,7 +73,7 @@ graph TD
     
     Workers --> Merge
     GenImg --> DB[(🗄️ PostgreSQL Persistence)]
-    GenImg --> UI[💻 Streamlit Frosted Glass UI]
+    GenImg --> UI[💻 Streamlit UI]
 ```
 
 ---
