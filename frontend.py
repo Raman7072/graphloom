@@ -259,26 +259,23 @@ if _COOKIES_AVAILABLE and _cookie_manager and st.session_state.get("logout_pendi
 # Auto-restore session from cookie on page load / refresh
 if _AUTH_AVAILABLE and _COOKIES_AVAILABLE and "user" not in st.session_state:
     if not st.session_state.get("logged_out", False):
-        cookies = _cookie_manager.get_all()   # only ONE get_all() per run
+        cookies = _cookie_manager.get_all()
+        _token = cookies.get("graphloom_session") if cookies else None
 
-        if not cookies and not st.session_state.get("_cookie_hydrated", False):
-            # Cookie manager JS bridge needs one extra rerun to hydrate.
-            # Guard with flag so we don't loop forever.
-            st.session_state["_cookie_hydrated"] = True
-            show_loading_screen("REFRESHING...", "Restoring session...")
-            st.rerun()
-            # ↑ script fully restarts here — code below won't execute this run
+        if _token:
+            _user_from_cookie = verify_session_token(str(_token))
+            if _user_from_cookie:
+                st.session_state["user"] = _user_from_cookie
+                st.session_state["page"] = cookies.get("graphloom_page", "home")
+                st.rerun()
 
-        if cookies:
-            _token = cookies.get("graphloom_session")
-            if _token:
-                _user_from_cookie = verify_session_token(str(_token))
-                if _user_from_cookie:
-                    st.session_state["user"] = _user_from_cookie
-                    st.session_state["page"] = cookies.get("graphloom_page", "home")
-
-        # Always reset hydration flag once we've attempted cookie restore
-        st.session_state["_cookie_hydrated"] = False
+        # If cookies haven't been checked for this fresh browser session yet,
+        # render the loading screen and stop so the CookieManager iframe HTML/JS
+        # reaches the browser to send document.cookie back to Streamlit.
+        if not st.session_state.get("_cookie_checked", False):
+            st.session_state["_cookie_checked"] = True
+            show_loading_screen("RESTORING SESSION...", "Verifying authentication...")
+            st.stop()
 
 
 # ── Auth helpers ─────────────────────────────────────────────
