@@ -1,6 +1,6 @@
 # 🧶 GraphLoom
 
-> **An Autonomous, Multi-Agent Technical Blog Generation Engine Powered by LangGraph, Groq, and Streamlit.**
+> **An Autonomous, Multi-Agent Technical Blog Generation Engine Powered by LangGraph, Groq and Streamlit.**
 
 ![GraphLoom Logo](images/logo.png)
 
@@ -115,14 +115,14 @@ GraphLoom/
 
 ### 1. Prerequisites
 - **Python**: `3.10` or higher
-- **PostgreSQL**: Local or hosted database instance (e.g., Supabase, Neon, or local Postgres)
+- **PostgreSQL**: Local or hosted database instance (e.g., Supabase, Neon or local Postgres)
 
 ### 2. Installation
 
 Clone the repository and enter the project directory:
 ```bash
-git clone https://github.com/your-username/GraphLoom.git
-cd GraphLoom
+git clone https://github.com/Raman7072/graphloom.git
+cd graphloom
 ```
 
 Create and activate a virtual environment:
@@ -153,6 +153,12 @@ DB_URL=postgresql://user:password@localhost:5432/graphloom_db
 # Security & Session Secrets
 SESSION_SECRET=your_random_hmac_secret_key_here
 ENVIRONMENT=development
+
+# LangSmith Tracking
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
+LANGSMITH_API_KEY=[LANGSMITH_API_KEY]
+LANGSMITH_PROJECT='GraphLoom'
 ```
 
 ---
