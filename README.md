@@ -81,7 +81,7 @@ graph TD
 ## 📂 Project Structure
 
 ```
-GraphLoom/
+graphloom/
 ├── backend.py            # LangGraph multi-agent backend state machine & node logic
 ├── frontend.py           # Streamlit UI, real-time telemetry dashboard & rendering
 ├── auth.py               # Database pool, bcrypt authentication, cookie tokens & profile stats
