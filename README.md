@@ -157,7 +157,7 @@ ENVIRONMENT=development
 # LangSmith Tracking
 LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
-LANGSMITH_API_KEY=[LANGSMITH_API_KEY]
+LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT='GraphLoom'
 ```
 
