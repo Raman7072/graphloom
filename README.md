@@ -1,4 +1,4 @@
-![GraphLoom Logo](styles/images/graphloom_logo_1.png)
+![GraphLoom Logo](styles/images/graphloom_logo.png)
 
 > **An Autonomous, Multi-Agent Technical Blog Generation Engine Powered by LangGraph, Groq and Streamlit.**
 
